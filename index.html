@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Europa 2027</title>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="manifest" href="manifest.json">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --sidebar-color: #2c3e50;
+            --accent-color: #3498db;
+            --text-color: #ecf0f1;
+        }
+
+        body { 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            height: 100vh; 
+            background: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        /* Layout para Desktop (se ajusta en móvil abajo) */
+        @media (min-width: 768px) {
+            body { flex-direction: row; }
+            #sidebar { width: 320px; height: 100vh; }
+            #map { flex-grow: 1; height: 100vh; }
+        }
+
+        #sidebar { 
+            padding: 20px; 
+            background: var(--sidebar-color); 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            box-sizing: border-box;
+            z-index: 1001;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+        }
+
+        #map { height: 50vh; width: 100%; flex-grow: 1; }
+
+        .widget { 
+            background: #34495e; 
+            padding: 15px; 
+            border-radius: 12px; 
+            border-left: 4px solid var(--accent-color); 
+        }
+
+        .countdown { 
+            font-size: 1.4em; 
+            font-weight: bold; 
+            text-align: center; 
+            color: #f1c40f; 
+            margin-top: 5px;
+        }
+
+        select { 
+            width: 100%; 
+            padding: 12px; 
+            background: #ecf0f1; 
+            border-radius: 8px; 
+            font-size: 16px; /* Evita zoom automático en iPhone */
+            border: none;
+        }
+
+        .weather-info { font-size: 0.9em; margin: 10px 0; font-weight: 500; }
+        .transport-icon { font-size: 40px; text-align: center; margin: 10px 0; }
+        h2 { margin: 0; font-size: 1.5em; text-align: center; color: var(--accent-color); }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h2>Europa 2027 🌍</h2>
+    
+    <div class="widget">
+        <div style="font-size: 0.8em; text-transform: uppercase; opacity: 0.7;">Tiempo para el despegue</div>
+        <div id="countdown" class="countdown">00d 00h 00m</div>
+    </div>
+
+    <div class="widget">
+        <label style="display:block; margin-bottom:8px; font-size: 0.8em;">ITINERARIO:</label>
+        <select id="dateSelector" onchange="updateTrip()"></select>
+    </div>
+
+    <div id="infoCard" class="widget">
+        <h3 id="displayCity" style="margin:0;">Ciudad</h3>
+        <div id="weatherInfo" class="weather-info">Cargando clima...</div>
+        <div id="transportIcon" class="transport-icon">📍</div>
+        <p id="displayNote" style="font-size: 0.85em; line-height: 1.4; opacity: 0.9;"></p>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // --- DATOS DEL VIAJE ---
+    const DEPARTURE_DATE = new Date("2026-12-25T00:00:00").getTime();
+    const API_KEY_WEATHER = "TU_API_KEY_AQUI"; // REEMPLAZA ESTO
+
+    const tripData = [
+        { date: "2026-12-25", city: "Santiago", lat: -33.4489, lon: -70.6693, transport: "✈️", note: "Inicio de la aventura" },
+        { date: "2026-12-26", city: "Toronto", lat: 43.6532, lon: -79.3832, transport: "✈️", note: "Escala técnica en Canadá" },
+        { date: "2026-12-27", city: "London", lat: 51.5074, lon: -0.1278, transport: "✈️", note: "¡Llegada a Londres! Boxing Day" },
+        { date: "2026-12-28", city: "Edinburgh", lat: 55.9533, lon: -3.1883, transport: "🚆", note: "Tren hacia Escocia para Hogmanay" },
+        { date: "2027-01-04", city: "Dublin", lat: 53.3498, lon: -6.2603, transport: "✈️", note: "Cruzando a la Isla de Irlanda" },
+        { date: "2027-01-08", city: "Belfast", lat: 54.5973, lon: -5.9301, transport: "🚌", note: "Explorando Irlanda del Norte" },
+        { date: "2027-01-11", city: "Cardiff", lat: 51.4816, lon: -3.1791, transport: "✈️", note: "Vuelo a la capital de Gales" },
+        { date: "2027-01-14", city: "London", lat: 51.5074, lon: -0.1278, transport: "🚆", note: "Regreso a Londres" }
+    ];
+
+    // --- INICIALIZACIÓN MAPA ---
+    const map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OSM'
+    }).addTo(map);
+
+    const pathCoords = tripData.map(d => [d.lat, d.lon]);
+    L.polyline(pathCoords, {color: '#3498db', weight: 2, dashArray: '10, 10'}).addTo(map);
+    let marker = L.marker([tripData[0].lat, tripData[0].lon]).addTo(map);
+
+    // --- CONTADOR ---
+    function updateCountdown() {
+        const now = new Date().getTime();
+        const diff = DEPARTURE_DATE - now;
+        if (diff < 0) {
+            document.getElementById('countdown').innerHTML = "¡EN VIAJE!";
+            return;
+        }
+        const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        document.getElementById('countdown').innerHTML = `${d}d ${h}h ${m}m`;
+    }
+    setInterval(updateCountdown, 1000);
+    updateCountdown();
+
+    // --- CLIMA ---
+    async function getWeather(lat, lon) {
+        if(API_KEY_WEATHER === "TU_API_KEY_AQUI") return "🌡️ Clima (API no configurada)";
+        try {
+            const resp = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY_WEATHER}&units=metric&lang=es`);
+            const data = await resp.json();
+            return `🌡️ ${Math.round(data.main.temp)}°C | ${data.weather[0].description}`;
+        } catch { return "Clima no disponible"; }
+    }
+
+    // --- SELECTOR E INTERACCIÓN ---
+    const selector = document.getElementById('dateSelector');
+    tripData.forEach((d, i) => {
+        let opt = document.createElement('option');
+        opt.value =
