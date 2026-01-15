@@ -1,7 +1,7 @@
 {
   "name": "Europa 2027",
   "short_name": "Viaje 2027",
-  "start_url": "index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#2c3e50",
   "theme_color": "#3498db",
@@ -9,8 +9,7 @@
     {
       "src": "icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "type": "image/svg+xml"
     }
   ]
 }
