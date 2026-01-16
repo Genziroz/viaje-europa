@@ -2,9 +2,8 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Europa 2027 Dashboard</title>
+    <title>Planner Europa 2027</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon.svg">
@@ -13,37 +12,34 @@
     <style>
         :root { --bg: #1a1a1a; --side: #2c3e50; --acc: #3498db; --txt: #ecf0f1; }
         body { margin: 0; display: flex; flex-direction: column; font-family: -apple-system, system-ui; height: 100vh; background: var(--bg); color: var(--txt); overflow: hidden; }
-        @media (min-width: 768px) { body { flex-direction: row; } #sidebar { width: 350px; } }
-        #sidebar { padding: 20px; background: var(--side); display: flex; flex-direction: column; gap: 12px; z-index: 1001; box-shadow: 2px 0 10px rgba(0,0,0,0.5); box-sizing: border-box; overflow-y: auto; }
+        @media (min-width: 768px) { body { flex-direction: row; } #sidebar { width: 380px; } }
+        #sidebar { padding: 20px; background: var(--side); display: flex; flex-direction: column; gap: 15px; z-index: 1001; box-shadow: 2px 0 10px rgba(0,0,0,0.5); overflow-y: auto; }
         #map { flex-grow: 1; height: 40vh; width: 100%; }
         @media (min-width: 768px) { #map { height: 100vh; } }
-        .widget { background: #34495e; padding: 12px; border-radius: 12px; border-left: 4px solid var(--acc); }
-        .countdown { font-size: 1.2em; font-weight: bold; text-align: center; color: #f1c40f; }
-        select { width: 100%; padding: 12px; background: #ecf0f1; border-radius: 8px; font-size: 16px; border: none; color: #333; font-weight: bold; }
-        .city-img { width: 100%; height: 150px; border-radius: 10px; object-fit: cover; margin-top: 10px; border: 2px solid var(--acc); }
-        .transport-badge { font-size: 24px; background: rgba(0,0,0,0.2); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; margin: 10px auto; }
-        .weather-info { font-weight: bold; color: #f1c40f; text-align: center; font-size: 0.9em; }
+        .widget { background: #34495e; padding: 15px; border-radius: 12px; border-left: 4px solid var(--acc); }
+        select { width: 100%; padding: 12px; border-radius: 8px; font-size: 16px; border: none; font-weight: bold; }
+        .btn-clear { background: #e74c3c; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer; margin-top: 10px; width: 100%; }
+        .poi-list { font-size: 0.85em; margin-top: 10px; padding: 0; list-style: none; }
+        .poi-item { background: rgba(255,255,255,0.1); padding: 5px 10px; margin-bottom: 4px; border-radius: 4px; display: flex; justify-content: space-between; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <h2 style="color:var(--acc); text-align:center; margin:0; cursor:pointer" onclick="resetView()">Europa 2027 🌍</h2>
+    <h2 style="color:var(--acc); text-align:center; margin:0;" onclick="resetView()">Europa 2027 🌍</h2>
     
     <div class="widget">
-        <div id="countdown" class="countdown">00d 00h 00m</div>
+        <label style="font-size: 0.8em; opacity: 0.8;">CALENDARIO:</label>
+        <select id="dateSelector" onchange="handleDateChange()"></select>
     </div>
 
-    <div class="widget">
-        <select id="dateSelector" onchange="updateTrip()"></select>
-    </div>
-
-    <div id="infoCard" class="widget">
-        <h3 id="displayCity" style="margin:0; text-align:center;">Plan de Viaje</h3>
-        <div id="weatherInfo" class="weather-info">Selecciona destino</div>
-        <img id="cityImage" class="city-img" src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=400&q=80" alt="Ciudad">
-        <div id="transportIcon" class="transport-badge">✈️</div>
-        <p id="displayNote" style="font-size: 0.85em; opacity: 0.9; line-height: 1.4; text-align: center;"></p>
+    <div id="plannerCard" class="widget">
+        <h3 id="displayCity" style="margin:0;">Selecciona un día</h3>
+        <p id="weatherInfo" style="color: #f1c40f; font-size: 0.9em; margin: 5px 0;"></p>
+        <hr>
+        <strong>Mi Ruta Personalizada:</strong>
+        <ul id="customRouteList" class="poi-list"></ul>
+        <button class="btn-clear" onclick="clearDayRoute()">Limpiar Ruta del Día</button>
     </div>
 </div>
 
@@ -51,101 +47,115 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    const DEPARTURE_DATE = new Date("2026-12-25T00:00:00").getTime();
-    const API_KEY_WEATHER = "TU_API_KEY_AQUI"; // REEMPLAZAR
+    // --- 1. CONFIGURACIÓN DE FECHAS ---
+    const START_DATE = new Date("2026-12-25");
+    const END_DATE = new Date("2027-02-28");
+    const API_KEY_WEATHER = "TU_API_KEY_AQUI";
 
-    const tripData = [
-        { date: "2026-12-25", city: "Santiago", lat: -33.4489, lon: -70.6693, transport: "✈️", note: "Inicio de la aventura desde SCL", img: "https://images.unsplash.com/photo-1590059345136-9767664c1256?auto=format&fit=crop&w=400&q=80" },
-        { date: "2026-12-26", city: "Toronto", lat: 43.6532, lon: -79.3832, transport: "✈️", note: "Escala técnica", img: "https://images.unsplash.com/photo-1517090504586-fde19ea6066f?auto=format&fit=crop&w=400&q=80" },
-        { date: "2026-12-27", city: "London", lat: 51.5074, lon: -0.1278, transport: "✈️", note: "Llegada a Londres", img: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=400&q=80" },
-        { 
-            date: "2026-12-28", city: "Edinburgh", lat: 55.9533, lon: -3.1883, transport: "🚆", 
-            note: "Primer día en Escocia: Caminata por el Old Town", 
-            img: "https://images.unsplash.com/photo-1506377585622-bedcbb027afc?auto=format&fit=crop&w=400&q=80",
-            walkingRoute: [
-                [55.9520, -3.1897], // Waverley Station
-                [55.9475, -3.1930], // Kick Ass Greyfriars (Hostel)
-                [55.9484, -3.1933], // Victoria St
-                [55.9495, -3.1908], // St Giles' Cathedral
-                [55.9486, -3.2008]  // Edinburgh Castle
-            ]
-        },
-        { date: "2027-01-04", city: "Dublin", lat: 53.3498, lon: -6.2603, transport: "✈️", note: "Cruzando el mar de Irlanda", img: "https://images.unsplash.com/photo-1549918838-067c442cc269?auto=format&fit=crop&w=400&q=80" },
-        { date: "2027-01-08", city: "Belfast", lat: 54.5973, lon: -5.9301, transport: "🚌", note: "Explorando N. Ireland", img: "https://images.unsplash.com/photo-1552554625-78e76a661603?auto=format&fit=crop&w=400&q=80" },
-        { date: "2027-01-11", city: "Cardiff", lat: 51.4816, lon: -3.1791, transport: "✈️", note: "Vuelo a Gales", img: "https://images.unsplash.com/photo-1559828589-9943236e7a2b?auto=format&fit=crop&w=400&q=80" },
-        { date: "2027-01-14", city: "London", lat: 51.5074, lon: -0.1278, transport: "🚆", note: "Regreso final", img: "https://images.unsplash.com/photo-1526129318478-62ed807ebdf9?auto=format&fit=crop&w=400&q=80" }
-    ];
+    // --- 2. BASE DE DATOS DE LUGARES (POIs) ---
+    const placesDB = {
+        "Edinburgh": [
+            { name: "Waverley Station", coords: [55.9520, -3.1897], type: "transport" },
+            { name: "Kick Ass Greyfriars", coords: [55.9475, -3.1930], type: "hostel" },
+            { name: "Victoria Street", coords: [55.9484, -3.1933], type: "sight" },
+            { name: "St Giles' Cathedral", coords: [55.9495, -3.1908], type: "sight" },
+            { name: "Edinburgh Castle", coords: [55.9486, -3.2008], type: "sight" },
+            { name: "The Elephant House", coords: [55.9477, -3.1920], type: "food" }
+        ],
+        "London": [
+            { name: "King's Cross", coords: [51.5308, -0.1238], type: "transport" },
+            { name: "Big Ben", coords: [51.5007, -0.1246], type: "sight" },
+            { name: "London Eye", coords: [51.5033, -0.1195], type: "sight" }
+        ]
+    };
 
-    const map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
+    // --- 3. ESTADO DE LA APP ---
+    let userRoutes = JSON.parse(localStorage.getItem('userRoutes')) || {}; 
+    // Estructura: { "2026-12-28": ["Edinburgh Castle", "St Giles"] }
+
+    // --- 4. INICIALIZAR MAPA ---
+    const map = L.map('map', { zoomControl: false }).setView([50, 0], 4);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    let globalPath = L.polyline(tripData.map(d => [d.lat, d.lon]), {color: '#3498db', weight: 2, dashArray: '10, 10'}).addTo(map);
-    let marker = L.marker([tripData[0].lat, tripData[0].lon]).addTo(map);
-    let currentWalk = L.polyline([], {color: '#e67e22', weight: 4}).addTo(map);
+    let activeMarkers = [];
+    let polyline = L.polyline([], {color: '#e67e22', weight: 4, dashArray: '5, 10'}).addTo(map);
 
-    function updateCountdown() {
-        const diff = DEPARTURE_DATE - new Date().getTime();
-        const d = Math.floor(diff / 86400000);
-        const h = Math.floor((diff % 86400000) / 3600000);
-        const m = Math.floor((diff % 3600000) / 60000);
-        document.getElementById('countdown').innerHTML = diff > 0 ? `${d}d ${h}h ${m}m` : "¡EN VIAJE!";
-    }
-    setInterval(updateCountdown, 1000);
-
-    async function getWeather(lat, lon) {
-        if(API_KEY_WEATHER === "TU_API_KEY_AQUI") return "🌡️ Configura API clima";
-        try {
-            const resp = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY_WEATHER}&units=metric&lang=es`);
-            const data = await resp.json();
-            return `🌡️ ${Math.round(data.main.temp)}°C | ${data.weather[0].description}`;
-        } catch { return "Clima no disponible"; }
-    }
-
-    function resetView() {
-        map.flyTo([48, 2], 4);
-        selector.value = "";
-        document.getElementById('displayCity').innerText = "Ruta Completa";
-        document.getElementById('displayNote').innerText = "Haz clic en un día para ver detalles.";
-        currentWalk.setLatLngs([]);
-    }
-
+    // --- 5. GENERAR SELECTOR DE FECHAS ---
     const selector = document.getElementById('dateSelector');
-    let defaultOpt = document.createElement('option');
-    defaultOpt.value = ""; defaultOpt.innerHTML = "Seleccionar Día...";
-    selector.appendChild(defaultOpt);
-
-    tripData.forEach((d, i) => {
+    for (let d = new Date(START_DATE); d <= END_DATE; d.setDate(d.getDate() + 1)) {
+        let dateStr = d.toISOString().split('T')[0];
         let opt = document.createElement('option');
-        opt.value = i;
-        opt.innerHTML = `${d.date.split('-')[2]}/${d.date.split('-')[1]} - ${d.city}`;
+        opt.value = dateStr;
+        opt.innerHTML = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
         selector.appendChild(opt);
-    });
+    }
 
-    async function updateTrip() {
-        if(selector.value === "") { resetView(); return; }
-        const d = tripData[selector.value];
-        document.getElementById('displayCity').innerText = d.city;
-        document.getElementById('displayNote').innerText = d.note;
-        document.getElementById('transportIcon').innerText = d.transport;
-        document.getElementById('cityImage').src = d.img;
+    // --- 6. LÓGICA DE INTERACCIÓN ---
+    function handleDateChange() {
+        const date = selector.value;
+        // Determinamos ciudad (Lógica simple para el ejemplo)
+        let city = "London";
+        if (date >= "2026-12-28" && date <= "2027-01-03") city = "Edinburgh";
         
-        document.getElementById('weatherInfo').innerText = "Cargando clima...";
-        document.getElementById('weatherInfo').innerText = await getWeather(d.lat, d.lon);
+        document.getElementById('displayCity').innerText = city + " (" + date + ")";
+        renderPOIs(city, date);
+        drawSavedRoute(date, city);
+    }
 
-        marker.setLatLng([d.lat, d.lon]);
+    function renderPOIs(city, date) {
+        // Limpiar marcadores previos
+        activeMarkers.forEach(m => map.removeLayer(m));
+        activeMarkers = [];
 
-        // Dibujar ruta local si existe
-        if(d.walkingRoute) {
-            currentWalk.setLatLngs(d.walkingRoute);
-            map.flyToBounds(d.walkingRoute, { padding: [50, 50], duration: 2 });
-        } else {
-            currentWalk.setLatLngs([]);
-            map.flyTo([d.lat, d.lon], 11);
+        if (placesDB[city]) {
+            placesDB[city].forEach(place => {
+                let m = L.marker(place.coords).addTo(map)
+                    .bindPopup(`<b>${place.name}</b><br><button onclick="addToRoute('${date}', '${city}', '${place.name}')">Añadir a ruta</button>`);
+                activeMarkers.push(m);
+            });
+            // Auto zoom a la ciudad
+            let group = L.featureGroup(activeMarkers);
+            map.fitBounds(group.getBounds().pad(0.5));
         }
     }
 
-    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js'); }
-    window.onload = resetView;
+    function addToRoute(date, city, placeName) {
+        if (!userRoutes[date]) userRoutes[date] = [];
+        if (!userRoutes[date].includes(placeName)) {
+            userRoutes[date].push(placeName);
+            localStorage.setItem('userRoutes', JSON.stringify(userRoutes));
+            drawSavedRoute(date, city);
+        }
+    }
+
+    function drawSavedRoute(date, city) {
+        const list = document.getElementById('customRouteList');
+        list.innerHTML = "";
+        const routeNames = userRoutes[date] || [];
+        const coords = [];
+
+        routeNames.forEach(name => {
+            const place = placesDB[city].find(p => p.name === name);
+            if (place) {
+                coords.push(place.coords);
+                let li = document.createElement('li');
+                li.className = "poi-item";
+                li.innerHTML = `<span>${name}</span>`;
+                list.appendChild(li);
+            }
+        });
+
+        polyline.setLatLngs(coords);
+    }
+
+    function clearDayRoute() {
+        const date = selector.value;
+        userRoutes[date] = [];
+        localStorage.setItem('userRoutes', JSON.stringify(userRoutes));
+        drawSavedRoute(date, "");
+    }
+
+    window.onload = handleDateChange;
 </script>
 </body>
 </html>
