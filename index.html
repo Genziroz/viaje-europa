@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Europa 2027 Master Planner</title>
+    <title>Europa 2027 - Libertad Total</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,46 +17,47 @@
         body { margin: 0; display: flex; flex-direction: column; font-family: -apple-system, system-ui; height: 100vh; background: var(--bg); color: var(--txt); overflow: hidden; }
         @media (min-width: 768px) { body { flex-direction: row; } #sidebar { width: 380px; } }
         #sidebar { padding: 20px; background: var(--side); display: flex; flex-direction: column; gap: 12px; z-index: 1001; box-shadow: 2px 0 10px rgba(0,0,0,0.5); box-sizing: border-box; overflow-y: auto; }
-        #map { flex-grow: 1; height: 45vh; width: 100%; }
+        #map { flex-grow: 1; height: 45vh; width: 100%; cursor: pointer; }
         @media (min-width: 768px) { #map { height: 100vh; } }
         .widget { background: #34495e; padding: 12px; border-radius: 12px; border-left: 4px solid var(--acc); }
         select, input { width: 100%; padding: 10px; border-radius: 8px; font-size: 14px; border: none; margin-top: 5px; box-sizing: border-box; }
         .weather-info { font-weight: bold; color: #f1c40f; text-align: center; margin: 5px 0; }
         .poi-list { font-size: 0.8em; padding: 0; list-style: none; margin-top: 10px; }
-        .poi-item { background: rgba(0,0,0,0.3); padding: 8px; margin-bottom: 5px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
-        .btn { padding: 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; transition: 0.3s; }
+        .poi-item { background: rgba(0,0,0,0.3); padding: 8px; margin-bottom: 5px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.1); }
+        .btn { padding: 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; }
         .btn-save { background: #27ae60; color: white; }
-        .btn-del { background: #e74c3c; color: white; width: auto; padding: 2px 8px; }
+        .btn-reset { background: #95a5a6; color: white; font-size: 0.7em; margin-top: 3px; }
+        .btn-del { background: #e74c3c; color: white; width: auto; padding: 2px 8px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <h2 style="color:var(--acc); text-align:center; margin:0;" onclick="location.reload()">Europa 2027 🌍</h2>
+    <h2 style="color:var(--acc); text-align:center; margin:0; cursor:pointer" onclick="location.reload()">Europa 2027 🌍</h2>
     
     <div class="widget" style="text-align: center;">
-        <div id="countdown" style="font-weight: bold; color: #f1c40f;"></div>
+        <div id="countdown" style="font-weight: bold; color: #f1c40f; font-size: 0.9em;"></div>
     </div>
 
     <div class="widget">
-        <label style="font-size: 0.75em; opacity: 0.8;">FECHA DEL ITINERARIO:</label>
+        <label style="font-size: 0.75em; opacity: 0.8;">DÍA DEL VIAJE:</label>
         <select id="dateSelector" onchange="handleDateChange()"></select>
     </div>
 
     <div class="widget">
-        <label style="font-size: 0.75em; opacity: 0.8;">DESTINO PARA ESTE DÍA:</label>
-        <input type="text" id="cityInput" placeholder="Ej: Budapest, Hungría">
-        <button class="btn btn-save" onclick="saveCityOverride()">Asignar Destino</button>
+        <label style="font-size: 0.75em; opacity: 0.8;">LUGAR / CIUDAD (SOBREESCRIBIR):</label>
+        <input type="text" id="cityInput" placeholder="Ej: Budapest o 'En el bus'">
+        <button class="btn btn-save" onclick="saveCityOverride()">Cambiar Destino</button>
+        <button class="btn btn-reset" onclick="resetCity()">Restablecer al plan original</button>
     </div>
 
     <div id="infoCard" class="widget">
         <h3 id="displayCity" style="margin:0; text-align:center;">---</h3>
         <div id="weatherInfo" class="weather-info">---</div>
-        <p id="displayNote" style="font-size: 0.8em; opacity: 0.8; text-align: center; margin-top: 5px;"></p>
     </div>
 
     <div class="widget">
-        <strong style="font-size: 0.8em;">👣 MI RUTA PERSONALIZADA:</strong>
+        <strong style="font-size: 0.8em;">👣 MI RUTA (Toca el mapa para añadir):</strong>
         <ul id="customRouteList" class="poi-list"></ul>
     </div>
 </div>
@@ -66,12 +67,10 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 <script>
-    // --- 1. CONFIGURACIÓN Y CLAVES ---
     const API_KEY_WEATHER = "ea94bc98ee482fed33c2d311bccabff0";
     const START_DATE = new Date("2026-12-25");
     const END_DATE = new Date("2027-02-28");
 
-    // Itinerario base (Hardcoded)
     const baseTrip = [
         { date: "2026-12-25", city: "Santiago", lat: -33.4489, lon: -70.6693 },
         { date: "2026-12-26", city: "Toronto", lat: 43.6532, lon: -79.3832 },
@@ -83,30 +82,16 @@
         { date: "2027-01-14", city: "London", lat: 51.5074, lon: -0.1278 }
     ];
 
-    // Almacenamiento Local (Persistente)
-    let customCities = JSON.parse(localStorage.getItem('customCities_V7')) || {};
-    let customRoutes = JSON.parse(localStorage.getItem('customRoutes_V7')) || {};
+    let customCities = JSON.parse(localStorage.getItem('customCities_V8')) || {};
+    let customRoutes = JSON.parse(localStorage.getItem('customRoutes_V8')) || {};
 
-    // --- 2. MAPA PRO (ESTILO VOYAGER) ---
     const map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; CartoDB'
-    }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
 
-    // Añadir buscador (Geocoder)
     const geocoder = L.Control.Geocoder.nominatim();
-    L.Control.geocoder({ defaultMarkGeocode: false, position: 'topright' })
-        .on('markgeocode', function(e) {
-            const bbox = e.geocode.bbox;
-            map.fitBounds(bbox);
-            L.marker(e.geocode.center).addTo(map).bindPopup(e.geocode.name).openPopup();
-        })
-        .addTo(map);
-
     let routeLine = L.polyline([], {color: '#e67e22', weight: 4}).addTo(map);
     let tempMarkers = [];
 
-    // --- 3. FUNCIONES DE CORE ---
     function getTripInfo(date) {
         if (customCities[date]) return customCities[date];
         let lastMatch = baseTrip[0];
@@ -116,7 +101,6 @@
         return lastMatch;
     }
 
-    // --- 4. GENERAR CALENDARIO ---
     const selector = document.getElementById('dateSelector');
     for (let d = new Date(START_DATE); d <= END_DATE; d.setDate(d.getDate() + 1)) {
         let dateStr = d.toISOString().split('T')[0];
@@ -129,12 +113,9 @@
     async function handleDateChange() {
         const date = selector.value;
         const info = getTripInfo(date);
-        
         document.getElementById('displayCity').innerText = info.city;
         document.getElementById('cityInput').value = customCities[date] ? info.city : "";
-        document.getElementById('weatherInfo').innerText = "Cargando clima...";
         
-        // Fetch Clima Actual
         try {
             const resp = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${info.lat}&lon=${info.lon}&appid=${API_KEY_WEATHER}&units=metric&lang=es`);
             const data = await resp.json();
@@ -142,38 +123,49 @@
         } catch { document.getElementById('weatherInfo').innerText = "Clima no disponible"; }
 
         drawDayRoute(date);
-        map.flyTo([info.lat, info.lon], 13);
+        map.flyTo([info.lat, info.lon], 14);
     }
 
-    // Guardar cambio de ciudad para un día
     function saveCityOverride() {
         const date = selector.value;
         const newCity = document.getElementById('cityInput').value;
         if (!newCity) return;
 
-        // Usar el geocoder para buscar las coordenadas de la nueva ciudad
         geocoder.geocode(newCity, (results) => {
             if (results.length > 0) {
                 const res = results[0];
                 customCities[date] = { city: newCity, lat: res.center.lat, lon: res.center.lng };
-                localStorage.setItem('customCities_V7', JSON.stringify(customCities));
-                location.reload(); // Recargar para actualizar lista del selector
-            } else {
-                alert("No encontramos esa ciudad. Prueba con un nombre más claro.");
-            }
+                localStorage.setItem('customCities_V8', JSON.stringify(customCities));
+                location.reload(); 
+            } else { alert("Lugar no encontrado."); }
         });
     }
 
-    // Click en Mapa para añadir puntos a la ruta
+    function resetCity() {
+        delete customCities[selector.value];
+        localStorage.setItem('customCities_V8', JSON.stringify(customCities));
+        location.reload();
+    }
+
+    // CLIC EN MAPA: Identificación automática del lugar
     map.on('click', (e) => {
         const date = selector.value;
-        const pName = prompt("¿Qué hay aquí? (Ej: Restaurant, Museo)");
-        if (pName) {
-            if (!customRoutes[date]) customRoutes[date] = [];
-            customRoutes[date].push({ name: pName, lat: e.latlng.lat, lon: e.latlng.lng });
-            localStorage.setItem('customRoutes_V7', JSON.stringify(customRoutes));
-            drawDayRoute(date);
-        }
+        // Le preguntamos al servidor qué hay en ese punto (Reverse Geocoding)
+        geocoder.reverse(e.latlng, map.options.crs.scale(map.getZoom()), (results) => {
+            let suggestedName = "Punto en el mapa";
+            if (results.length > 0) {
+                // Tomamos el nombre más corto/específico del resultado
+                suggestedName = results[0].name.split(',')[0];
+            }
+            
+            const pName = prompt("¿Añadir este lugar a tu ruta?", suggestedName);
+            if (pName) {
+                if (!customRoutes[date]) customRoutes[date] = [];
+                customRoutes[date].push({ name: pName, lat: e.latlng.lat, lon: e.latlng.lng });
+                localStorage.setItem('customRoutes_V8', JSON.stringify(customRoutes));
+                drawDayRoute(date);
+            }
+        });
     });
 
     function drawDayRoute(date) {
@@ -198,16 +190,14 @@
 
     function deletePoint(index) {
         customRoutes[selector.value].splice(index, 1);
-        localStorage.setItem('customRoutes_V7', JSON.stringify(customRoutes));
+        localStorage.setItem('customRoutes_V8', JSON.stringify(customRoutes));
         drawDayRoute(selector.value);
     }
 
-    // Contador
     setInterval(() => {
         const diff = new Date("2026-12-25T00:00:00").getTime() - new Date().getTime();
         const d = Math.floor(diff / 86400000);
-        const h = Math.floor((diff % 86400000) / 3600000);
-        document.getElementById('countdown').innerHTML = `⏳ Faltan ${d} días y ${h} horas`;
+        document.getElementById('countdown').innerHTML = `⏳ Faltan ${d} días para el inicio`;
     }, 1000);
 
     window.onload = handleDateChange;
