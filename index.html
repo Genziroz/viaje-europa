@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Europa 2027 - V9</title>
+    <title>Europa 2027 Navigator</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -16,23 +16,29 @@
         body { margin: 0; display: flex; flex-direction: column; font-family: -apple-system, system-ui; height: 100vh; background: var(--bg); color: var(--txt); overflow: hidden; }
         @media (min-width: 768px) { body { flex-direction: row; } #sidebar { width: 380px; } }
         #sidebar { padding: 20px; background: var(--side); display: flex; flex-direction: column; gap: 12px; z-index: 1001; box-shadow: 2px 0 10px rgba(0,0,0,0.5); box-sizing: border-box; overflow-y: auto; }
-        #map { flex-grow: 1; height: 45vh; width: 100%; cursor: crosshair; }
+        #map { flex-grow: 1; height: 45vh; width: 100%; cursor: crosshair; position: relative; }
         @media (min-width: 768px) { #map { height: 100vh; } }
+        
+        /* Buscador Lupa */
+        .search-container { position: absolute; top: 15px; right: 15px; z-index: 1000; display: flex; gap: 5px; }
+        .search-input { padding: 10px; border-radius: 8px; border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.3); width: 180px; font-size: 14px; }
+        .search-btn { background: var(--acc); color: white; border: none; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+
         .widget { background: #34495e; padding: 12px; border-radius: 12px; border-left: 4px solid var(--acc); }
-        select, input { width: 100%; padding: 10px; border-radius: 8px; font-size: 14px; border: none; margin-top: 5px; box-sizing: border-box; }
+        select, input[type="text"] { width: 100%; padding: 10px; border-radius: 8px; font-size: 14px; border: none; margin-top: 5px; box-sizing: border-box; }
         .weather-info { font-weight: bold; color: #f1c40f; text-align: center; margin: 5px 0; font-size: 0.9em; }
         .poi-list { font-size: 0.8em; padding: 0; list-style: none; margin-top: 10px; }
-        .poi-item { background: rgba(0,0,0,0.3); padding: 8px; margin-bottom: 5px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+        .poi-item { background: rgba(0,0,0,0.3); padding: 8px; margin-bottom: 5px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.1); }
         .btn { padding: 10px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; }
         .btn-save { background: #27ae60; color: white; }
         .btn-reset { background: #7f8c8d; color: white; font-size: 0.7em; }
-        .btn-del { background: #e74c3c; color: white; width: auto; padding: 2px 8px; }
-        #loadingOverlay { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; display: none; z-index: 2000; font-size: 12px; }
+        .btn-del { background: #e74c3c; color: white; width: auto; padding: 2px 8px; border-radius: 4px; }
+        #loadingOverlay { position: fixed; top: 70px; right: 15px; background: rgba(0,0,0,0.8); color: white; padding: 8px 15px; border-radius: 20px; display: none; z-index: 2000; font-size: 11px; }
     </style>
 </head>
 <body>
 
-<div id="loadingOverlay">Procesando...</div>
+<div id="loadingOverlay">Calculando ruta por calles...</div>
 
 <div id="sidebar">
     <h2 style="color:var(--acc); text-align:center; margin:0; cursor:pointer" onclick="location.reload()">Europa 2027 🌍</h2>
@@ -42,15 +48,15 @@
     </div>
 
     <div class="widget">
-        <label style="font-size: 0.75em; opacity: 0.8;">DÍA SELECCIONADO:</label>
+        <label style="font-size: 0.75em; opacity: 0.8;">DÍA DEL ITINERARIO:</label>
         <select id="dateSelector" onchange="handleDateChange()"></select>
     </div>
 
     <div class="widget">
-        <label style="font-size: 0.75em; opacity: 0.8;">CIUDAD / DESTINO DEL DÍA:</label>
+        <label style="font-size: 0.75em; opacity: 0.8;">CIUDAD BASE:</label>
         <input type="text" id="cityInput" placeholder="Ej: Budapest, Hungría">
-        <button class="btn btn-save" onclick="saveCityOverride()">Actualizar Ubicación</button>
-        <button class="btn btn-reset" onclick="resetCity()">Restablecer Original</button>
+        <button class="btn btn-save" onclick="saveCityOverride()">Cambiar Ciudad</button>
+        <button class="btn btn-reset" onclick="resetCity()">Reset al Plan Original</button>
     </div>
 
     <div id="infoCard" class="widget">
@@ -64,11 +70,15 @@
     </div>
 </div>
 
-<div id="map"></div>
+<div id="map">
+    <div class="search-container">
+        <input type="text" id="mapSearchInput" class="search-input" placeholder="Buscar lugar o calle...">
+        <button class="search-btn" onclick="searchOnMap()">🔍</button>
+    </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    // --- 1. CONFIGURACIÓN ---
     const API_KEY_WEATHER = "ea94bc98ee482fed33c2d311bccabff0";
     const START_DATE = new Date("2026-12-25");
     const END_DATE = new Date("2027-02-28");
@@ -84,19 +94,17 @@
         { date: "2027-01-14", city: "London", lat: 51.5074, lon: -0.1278 }
     ];
 
-    let customCities = JSON.parse(localStorage.getItem('customCities_V9')) || {};
-    let customRoutes = JSON.parse(localStorage.getItem('customRoutes_V9')) || {};
+    let customCities = JSON.parse(localStorage.getItem('customCities_V10')) || {};
+    let customRoutes = JSON.parse(localStorage.getItem('customRoutes_V10')) || {};
 
-    // --- 2. INICIALIZAR MAPA ---
     const map = L.map('map', { zoomControl: false, tap: false }).setView([20, 0], 2);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; CartoDB'
     }).addTo(map);
 
-    let routeLine = L.polyline([], {color: '#e67e22', weight: 4}).addTo(map);
+    let routeLine = L.polyline([], {color: '#e67e22', weight: 5, opacity: 0.8}).addTo(map);
     let tempMarkers = [];
 
-    // --- 3. GENERAR SELECTOR ---
     const selector = document.getElementById('dateSelector');
     for (let d = new Date(START_DATE); d <= END_DATE; d.setDate(d.getDate() + 1)) {
         let dateStr = d.toISOString().split('T')[0];
@@ -110,9 +118,7 @@
     function getTripInfo(date) {
         if (customCities[date]) return customCities[date];
         let lastMatch = baseTrip[0];
-        for (let entry of baseTrip) {
-            if (date >= entry.date) lastMatch = entry;
-        }
+        for (let entry of baseTrip) { if (date >= entry.date) lastMatch = entry; }
         return lastMatch;
     }
 
@@ -129,75 +135,75 @@
         } catch { document.getElementById('weatherInfo').innerText = "Clima no disponible"; }
 
         drawDayRoute(date);
-        map.flyTo([info.lat, info.lon], 13);
+        map.flyTo([info.lat, info.lon], 14);
     }
 
-    // --- 4. FUNCIONES DE BÚSQUEDA ---
+    // BUSCADOR LUPA
+    async function searchOnMap() {
+        const query = document.getElementById('mapSearchInput').value;
+        if (!query) return;
+        showLoading(true);
+        try {
+            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
+            const data = await resp.json();
+            if (data.length > 0) {
+                map.flyTo([data[0].lat, data[0].lon], 16);
+            } else { alert("No se encontró el lugar."); }
+        } catch (e) { console.error(e); }
+        showLoading(false);
+    }
+
     async function saveCityOverride() {
         const date = selector.value;
         const newCity = document.getElementById('cityInput').value;
         if (!newCity) return;
-
         showLoading(true);
         try {
             const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(newCity)}&limit=1`);
             const results = await resp.json();
             if (results.length > 0) {
-                const res = results[0];
-                customCities[date] = { city: newCity, lat: parseFloat(res.lat), lon: parseFloat(res.lon) };
-                localStorage.setItem('customCities_V9', JSON.stringify(customCities));
+                customCities[date] = { city: newCity, lat: parseFloat(results[0].lat), lon: parseFloat(results[0].lon) };
+                localStorage.setItem('customCities_V10', JSON.stringify(customCities));
                 location.reload(); 
-            } else { alert("No se encontró ese lugar."); }
-        } catch (e) { alert("Error al buscar ciudad."); }
+            }
+        } catch (e) { alert("Error"); }
         showLoading(false);
     }
 
     function resetCity() {
         delete customCities[selector.value];
-        localStorage.setItem('customCities_V9', JSON.stringify(customCities));
+        localStorage.setItem('customCities_V10', JSON.stringify(customCities));
         location.reload();
     }
 
-    // CLICK EN MAPA MEJORADO
     map.on('click', async (e) => {
         const date = selector.value;
         showLoading(true);
         try {
             const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${e.latlng.lat}&lon=${e.latlng.lng}`);
             const data = await resp.json();
+            let name = data.name || data.display_name.split(',')[0] || "Punto";
             showLoading(false);
-            
-            let suggestedName = data.name || data.display_name.split(',')[0] || "Punto seleccionado";
-            const pName = prompt(`¿Añadir este lugar a tu ruta?\nSugerencia: ${suggestedName}`, suggestedName);
-            
-            if (pName) {
+            if (confirm(`¿Añadir "${name}" a tu ruta?`)) {
                 if (!customRoutes[date]) customRoutes[date] = [];
-                customRoutes[date].push({ name: pName, lat: e.latlng.lat, lon: e.latlng.lng });
-                localStorage.setItem('customRoutes_V9', JSON.stringify(customRoutes));
+                customRoutes[date].push({ name: name, lat: e.latlng.lat, lon: e.latlng.lng });
+                localStorage.setItem('customRoutes_V10', JSON.stringify(customRoutes));
                 drawDayRoute(date);
             }
-        } catch (err) {
-            showLoading(false);
-            const pName = prompt("Error buscando nombre. ¿Cómo quieres llamar a este lugar?", "Punto manual");
-            if (pName) {
-                if (!customRoutes[date]) customRoutes[date] = [];
-                customRoutes[date].push({ name: pName, lat: e.latlng.lat, lon: e.latlng.lng });
-                localStorage.setItem('customRoutes_V9', JSON.stringify(customRoutes));
-                drawDayRoute(date);
-            }
-        }
+        } catch (err) { showLoading(false); }
     });
 
-    function drawDayRoute(date) {
+    // LÓGICA DE RUTA POR CALLES (OSRM)
+    async function drawDayRoute(date) {
         tempMarkers.forEach(m => map.removeLayer(m));
         tempMarkers = [];
         const list = document.getElementById('customRouteList');
         list.innerHTML = "";
         const points = customRoutes[date] || [];
-        const coords = [];
+        
+        if (points.length === 0) { routeLine.setLatLngs([]); return; }
 
         points.forEach((p, i) => {
-            coords.push([p.lat, p.lon]);
             let m = L.marker([p.lat, p.lon]).addTo(map).bindPopup(`${i+1}. ${p.name}`);
             tempMarkers.push(m);
             let li = document.createElement('li');
@@ -205,18 +211,34 @@
             li.innerHTML = `<span>${i+1}. ${p.name}</span> <button class="btn-del" onclick="deletePoint(${i})">x</button>`;
             list.appendChild(li);
         });
-        routeLine.setLatLngs(coords);
+
+        if (points.length < 2) { routeLine.setLatLngs([]); return; }
+
+        // Consultar OSRM para ruta por calles
+        showLoading(true);
+        const coordsStr = points.map(p => `${p.lon},${p.lat}`).join(';');
+        try {
+            const resp = await fetch(`https://router.project-osrm.org/route/v1/walking/${coordsStr}?overview=full&geometries=geojson`);
+            const data = await resp.json();
+            if (data.routes && data.routes.length > 0) {
+                // Convertir GeoJSON a formato Leaflet [lat, lon]
+                const routeCoords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                routeLine.setLatLngs(routeCoords);
+            }
+        } catch (e) {
+            // Fallback a línea recta si falla el servidor de rutas
+            routeLine.setLatLngs(points.map(p => [p.lat, p.lon]));
+        }
+        showLoading(false);
     }
 
     function deletePoint(index) {
         customRoutes[selector.value].splice(index, 1);
-        localStorage.setItem('customRoutes_V9', JSON.stringify(customRoutes));
+        localStorage.setItem('customRoutes_V10', JSON.stringify(customRoutes));
         drawDayRoute(selector.value);
     }
 
-    function showLoading(show) {
-        document.getElementById('loadingOverlay').style.display = show ? 'block' : 'none';
-    }
+    function showLoading(show) { document.getElementById('loadingOverlay').style.display = show ? 'block' : 'none'; }
 
     setInterval(() => {
         const diff = new Date("2026-12-25T00:00:00").getTime() - new Date().getTime();
