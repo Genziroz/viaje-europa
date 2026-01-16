@@ -2,38 +2,35 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Europa 2027</title>
-    
+    <title>Europa 2027 Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon.svg">
     <link rel="manifest" href="manifest.json">
-
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
         :root { --bg: #1a1a1a; --side: #2c3e50; --acc: #3498db; --txt: #ecf0f1; }
-        body { margin: 0; display: flex; flex-direction: column; font-family: -apple-system, system-ui; height: 100vh; background: var(--bg); color: var(--txt); }
-        @media (min-width: 768px) { body { flex-direction: row; } #sidebar { width: 320px; } }
-        #sidebar { padding: 20px; background: var(--side); display: flex; flex-direction: column; gap: 15px; z-index: 1001; box-shadow: 2px 0 10px rgba(0,0,0,0.5); box-sizing: border-box; }
-        #map { flex-grow: 1; height: 50vh; width: 100%; }
+        body { margin: 0; display: flex; flex-direction: column; font-family: -apple-system, system-ui; height: 100vh; background: var(--bg); color: var(--txt); overflow: hidden; }
+        @media (min-width: 768px) { body { flex-direction: row; } #sidebar { width: 350px; } }
+        #sidebar { padding: 20px; background: var(--side); display: flex; flex-direction: column; gap: 12px; z-index: 1001; box-shadow: 2px 0 10px rgba(0,0,0,0.5); box-sizing: border-box; overflow-y: auto; }
+        #map { flex-grow: 1; height: 40vh; width: 100%; }
         @media (min-width: 768px) { #map { height: 100vh; } }
-        .widget { background: #34495e; padding: 15px; border-radius: 12px; border-left: 4px solid var(--acc); }
-        .countdown { font-size: 1.4em; font-weight: bold; text-align: center; color: #f1c40f; }
-        select { width: 100%; padding: 12px; background: #ecf0f1; border-radius: 8px; font-size: 16px; border: none; color: #333; }
-        .transport-icon { font-size: 40px; text-align: center; margin: 10px 0; }
-        .weather-info { font-weight: bold; color: #f1c40f; margin: 5px 0; }
+        .widget { background: #34495e; padding: 12px; border-radius: 12px; border-left: 4px solid var(--acc); }
+        .countdown { font-size: 1.2em; font-weight: bold; text-align: center; color: #f1c40f; }
+        select { width: 100%; padding: 12px; background: #ecf0f1; border-radius: 8px; font-size: 16px; border: none; color: #333; font-weight: bold; }
+        .city-img { width: 100%; height: 150px; border-radius: 10px; object-fit: cover; margin-top: 10px; border: 2px solid var(--acc); }
+        .transport-badge { font-size: 24px; background: rgba(0,0,0,0.2); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; margin: 10px auto; }
+        .weather-info { font-weight: bold; color: #f1c40f; text-align: center; font-size: 0.9em; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <h2 style="color:var(--acc); text-align:center; margin:0;">Europa 2027 🌍</h2>
+    <h2 style="color:var(--acc); text-align:center; margin:0; cursor:pointer" onclick="resetView()">Europa 2027 🌍</h2>
     
     <div class="widget">
-        <div style="font-size: 0.7em; opacity: 0.7;">TIEMPO PARA EL VIAJE:</div>
         <div id="countdown" class="countdown">00d 00h 00m</div>
     </div>
 
@@ -42,10 +39,11 @@
     </div>
 
     <div id="infoCard" class="widget">
-        <h3 id="displayCity" style="margin:0;">Cargando...</h3>
-        <div id="weatherInfo" class="weather-info">Consultando clima...</div>
-        <div id="transportIcon" class="transport-icon">📍</div>
-        <p id="displayNote" style="font-size: 0.85em; opacity: 0.8; line-height: 1.4;"></p>
+        <h3 id="displayCity" style="margin:0; text-align:center;">Plan de Viaje</h3>
+        <div id="weatherInfo" class="weather-info">Selecciona destino</div>
+        <img id="cityImage" class="city-img" src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=400&q=80" alt="Ciudad">
+        <div id="transportIcon" class="transport-badge">✈️</div>
+        <p id="displayNote" style="font-size: 0.85em; opacity: 0.9; line-height: 1.4; text-align: center;"></p>
     </div>
 </div>
 
@@ -53,57 +51,69 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    // --- 1. CONFIGURACIÓN ---
     const DEPARTURE_DATE = new Date("2026-12-25T00:00:00").getTime();
-    
-    // REEMPLAZA EL TEXTO ABAJO CON TU API KEY REAL
-    const API_KEY_WEATHER = "TU_API_KEY_AQUI"; 
+    const API_KEY_WEATHER = "TU_API_KEY_AQUI"; // REEMPLAZAR
 
     const tripData = [
-        { date: "2026-12-25", city: "Santiago", lat: -33.4489, lon: -70.6693, transport: "✈️", note: "Inicio de la aventura desde SCL" },
-        { date: "2026-12-26", city: "Toronto", lat: 43.6532, lon: -79.3832, transport: "✈️", note: "Escala en Canadá" },
-        { date: "2026-12-27", city: "London", lat: 51.5074, lon: -0.1278, transport: "✈️", note: "Llegada a UK" },
-        { date: "2026-12-28", city: "Edinburgh", lat: 55.9533, lon: -3.1883, transport: "🚆", note: "Tren hacia Escocia" },
-        { date: "2027-01-04", city: "Dublin", lat: 53.3498, lon: -6.2603, transport: "✈️", note: "Cruzando el mar de Irlanda" },
-        { date: "2027-01-08", city: "Belfast", lat: 54.5973, lon: -5.9301, transport: "🚌", note: "Explorando N. Ireland" },
-        { date: "2027-01-11", city: "Cardiff", lat: 51.4816, lon: -3.1791, transport: "✈️", note: "Vuelo a Gales" },
-        { date: "2027-01-14", city: "London", lat: 51.5074, lon: -0.1278, transport: "🚆", note: "Regreso a la capital" }
+        { date: "2026-12-25", city: "Santiago", lat: -33.4489, lon: -70.6693, transport: "✈️", note: "Inicio de la aventura desde SCL", img: "https://images.unsplash.com/photo-1590059345136-9767664c1256?auto=format&fit=crop&w=400&q=80" },
+        { date: "2026-12-26", city: "Toronto", lat: 43.6532, lon: -79.3832, transport: "✈️", note: "Escala técnica", img: "https://images.unsplash.com/photo-1517090504586-fde19ea6066f?auto=format&fit=crop&w=400&q=80" },
+        { date: "2026-12-27", city: "London", lat: 51.5074, lon: -0.1278, transport: "✈️", note: "Llegada a Londres", img: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=400&q=80" },
+        { 
+            date: "2026-12-28", city: "Edinburgh", lat: 55.9533, lon: -3.1883, transport: "🚆", 
+            note: "Primer día en Escocia: Caminata por el Old Town", 
+            img: "https://images.unsplash.com/photo-1506377585622-bedcbb027afc?auto=format&fit=crop&w=400&q=80",
+            walkingRoute: [
+                [55.9520, -3.1897], // Waverley Station
+                [55.9475, -3.1930], // Kick Ass Greyfriars (Hostel)
+                [55.9484, -3.1933], // Victoria St
+                [55.9495, -3.1908], // St Giles' Cathedral
+                [55.9486, -3.2008]  // Edinburgh Castle
+            ]
+        },
+        { date: "2027-01-04", city: "Dublin", lat: 53.3498, lon: -6.2603, transport: "✈️", note: "Cruzando el mar de Irlanda", img: "https://images.unsplash.com/photo-1549918838-067c442cc269?auto=format&fit=crop&w=400&q=80" },
+        { date: "2027-01-08", city: "Belfast", lat: 54.5973, lon: -5.9301, transport: "🚌", note: "Explorando N. Ireland", img: "https://images.unsplash.com/photo-1552554625-78e76a661603?auto=format&fit=crop&w=400&q=80" },
+        { date: "2027-01-11", city: "Cardiff", lat: 51.4816, lon: -3.1791, transport: "✈️", note: "Vuelo a Gales", img: "https://images.unsplash.com/photo-1559828589-9943236e7a2b?auto=format&fit=crop&w=400&q=80" },
+        { date: "2027-01-14", city: "London", lat: 51.5074, lon: -0.1278, transport: "🚆", note: "Regreso final", img: "https://images.unsplash.com/photo-1526129318478-62ed807ebdf9?auto=format&fit=crop&w=400&q=80" }
     ];
 
-    // --- 2. INICIALIZACIÓN ---
     const map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    const pathCoords = tripData.map(d => [d.lat, d.lon]);
-    L.polyline(pathCoords, {color: '#3498db', weight: 2, dashArray: '10, 10'}).addTo(map);
+    let globalPath = L.polyline(tripData.map(d => [d.lat, d.lon]), {color: '#3498db', weight: 2, dashArray: '10, 10'}).addTo(map);
     let marker = L.marker([tripData[0].lat, tripData[0].lon]).addTo(map);
+    let currentWalk = L.polyline([], {color: '#e67e22', weight: 4}).addTo(map);
 
-    // --- 3. FUNCIONES ---
     function updateCountdown() {
         const diff = DEPARTURE_DATE - new Date().getTime();
         const d = Math.floor(diff / 86400000);
         const h = Math.floor((diff % 86400000) / 3600000);
         const m = Math.floor((diff % 3600000) / 60000);
-        document.getElementById('countdown').innerHTML = diff > 0 ? `${d}d ${h}h ${m}m` : "¡BUEN VIAJE!";
+        document.getElementById('countdown').innerHTML = diff > 0 ? `${d}d ${h}h ${m}m` : "¡EN VIAJE!";
     }
     setInterval(updateCountdown, 1000);
 
     async function getWeather(lat, lon) {
-        if(API_KEY_WEATHER === "ea94bc98ee482fed33c2d311bccabff0") return "🌡️ API no configurada";
+        if(API_KEY_WEATHER === "TU_API_KEY_AQUI") return "🌡️ Configura API clima";
         try {
-            const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY_WEATHER}&units=metric&lang=es`;
-            const resp = await fetch(url);
+            const resp = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY_WEATHER}&units=metric&lang=es`);
             const data = await resp.json();
-            if(data.main) {
-                return `🌡️ ${Math.round(data.main.temp)}°C | ${data.weather[0].description}`;
-            }
-            return "Clima no disponible";
-        } catch (e) {
-            return "Error de conexión";
-        }
+            return `🌡️ ${Math.round(data.main.temp)}°C | ${data.weather[0].description}`;
+        } catch { return "Clima no disponible"; }
+    }
+
+    function resetView() {
+        map.flyTo([48, 2], 4);
+        selector.value = "";
+        document.getElementById('displayCity').innerText = "Ruta Completa";
+        document.getElementById('displayNote').innerText = "Haz clic en un día para ver detalles.";
+        currentWalk.setLatLngs([]);
     }
 
     const selector = document.getElementById('dateSelector');
+    let defaultOpt = document.createElement('option');
+    defaultOpt.value = ""; defaultOpt.innerHTML = "Seleccionar Día...";
+    selector.appendChild(defaultOpt);
+
     tripData.forEach((d, i) => {
         let opt = document.createElement('option');
         opt.value = i;
@@ -112,24 +122,30 @@
     });
 
     async function updateTrip() {
+        if(selector.value === "") { resetView(); return; }
         const d = tripData[selector.value];
         document.getElementById('displayCity').innerText = d.city;
         document.getElementById('displayNote').innerText = d.note;
         document.getElementById('transportIcon').innerText = d.transport;
+        document.getElementById('cityImage').src = d.img;
         
-        document.getElementById('weatherInfo').innerText = "Consultando...";
-        const clima = await getWeather(d.lat, d.lon);
-        document.getElementById('weatherInfo').innerText = clima;
+        document.getElementById('weatherInfo').innerText = "Cargando clima...";
+        document.getElementById('weatherInfo').innerText = await getWeather(d.lat, d.lon);
 
         marker.setLatLng([d.lat, d.lon]);
-        map.flyTo([d.lat, d.lon], 11);
+
+        // Dibujar ruta local si existe
+        if(d.walkingRoute) {
+            currentWalk.setLatLngs(d.walkingRoute);
+            map.flyToBounds(d.walkingRoute, { padding: [50, 50], duration: 2 });
+        } else {
+            currentWalk.setLatLngs([]);
+            map.flyTo([d.lat, d.lon], 11);
+        }
     }
 
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js');
-    }
-
-    window.onload = updateTrip;
+    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js'); }
+    window.onload = resetView;
 </script>
 </body>
 </html>
